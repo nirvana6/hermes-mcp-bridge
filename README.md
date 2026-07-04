@@ -18,12 +18,12 @@
  Cursor Desktop                  hermes-mcp-bridge             Hermes Gateway
  ┌──────────────┐   stdio    ┌─────────────────────┐   HTTP   ┌──────────────┐
  │  mcp.json    │ ─────────→ │ FastMCP             │ ───────→ │ 127.0.0.1    │
- │  command: uv │            │  ├ hermes_ask()     │  Bearer  │ :8642        │
- │  args: [...] │ ←───────── │  ├ hermes_check()   │ ←─────── │ /v1/chat/    │
+ │  command:    │            │  ├ hermes_ask()     │  Bearer  │ :8642        │
+ │  /home/...   │ ←───────── │  ├ hermes_check()   │ ←─────── │ /v1/chat/    │
  └──────────────┘   stdio    │  ├ hermes_cancel()  │   JSON   │ completions  │
                              │  └ hermes_reset()   │          └──────────────┘
                              └─────────────────────┘
-                      X-Hermes-Session-Id → REPL 上下文保持
+                        X-Hermes-Session-Id → REPL context
 ```
 
 ### 1.1 Comparison with mlennie/hermes-mcp
@@ -38,7 +38,43 @@
 
 ---
 
-## 2. Why This Exists
+## 2. Profile Awareness
+
+The bridge connects to the **same Hermes profile** your gateway is currently serving.
+No extra configuration needed — it inherits everything that profile has loaded:
+
+- **Skills** — all profile-specific skills and workflows
+- **Memory** — persistent facts, preferences, and environment details
+- **Tools** — the full agent toolset bound to that profile
+- **Sessions** — `X-Hermes-Session-Id` threads into the profile's session store
+
+### 2.1 How it works
+
+```python
+# config.toml → /v1/chat/completions request
+{
+  "model": "general_researcher",   # ← this IS the Hermes profile name
+  "messages": [{"role": "user", "content": "..."}]
+}
+```
+
+The `model` field in `config.toml` is the profile identifier. The gateway routes it to the
+matching profile. To switch profiles, change `model` to the name shown in `/v1/models`.
+
+### 2.2 Discover available profiles
+
+```bash
+curl -s http://127.0.0.1:8642/v1/models \
+  -H "Authorization: Bearer change-me-local-dev"
+# → {"data": [{"id": "general_researcher", ...}, {"id": "default", ...}]}
+```
+
+> If your gateway only runs one profile, only one `id` appears. Start additional
+> gateway instances on different ports to serve multiple profiles simultaneously.
+
+---
+
+## 3. Why This Exists
 
 `mlennie/hermes-mcp` v0.4.0 hits three real-world blockers:
 
@@ -50,9 +86,9 @@ This bridge drops the HTTP transport layer entirely, runs as a stdio subprocess,
 
 ---
 
-## 3. Quick Start
+## 4. Quick Start
 
-### 3.1 Install
+### 4.1 Install
 
 ```bash
 git clone https://github.com/<your-org>/hermes-mcp-bridge.git
@@ -60,7 +96,7 @@ cd hermes-mcp-bridge
 uv tool install --editable .
 ```
 
-### 3.2 Configure
+### 4.2 Configure
 
 ```bash
 mkdir -p ~/.config/hermes-mcp-bridge
@@ -73,7 +109,7 @@ EOF
 chmod 600 ~/.config/hermes-mcp-bridge/config.toml
 ```
 
-### 3.3 Register with Cursor
+### 4.3 Register with Cursor
 
 Add to `~/.cursor/mcp.json`:
 
@@ -93,13 +129,13 @@ Add to `~/.cursor/mcp.json`:
 }
 ```
 
-### 3.4 Restart Cursor
+### 4.4 Restart Cursor
 
 Settings → MCP → `hermes` should show **connected**.
 
 ---
 
-## 4. Tools
+## 5. Tools
 
 | Tool            | Signature                     | Purpose                         |
 | --------------- | ----------------------------- | ------------------------------- |
@@ -113,7 +149,7 @@ Settings → MCP → `hermes` should show **connected**.
 
 ---
 
-## 5. REPL Context (Session Continuity)
+## 6. REPL Context (Session Continuity)
 
 ```python
 # Turn 1 — no session_id
@@ -130,7 +166,7 @@ The gateway uses it to maintain context across calls.
 
 ---
 
-## 6. Configuration Reference
+## 7. Configuration Reference
 
 `~/.config/hermes-mcp-bridge/config.toml`
 
@@ -145,7 +181,7 @@ Environment variable overrides (higher priority): `HERMES_BRIDGE_API_URL`, `HERM
 
 ---
 
-## 7. Security
+## 8. Security
 
 - All network traffic is confined to the `127.0.0.1` loopback interface.
 - The API key lives in `~/.config/hermes-mcp-bridge/config.toml` (mode `600`).
@@ -154,6 +190,6 @@ Environment variable overrides (higher priority): `HERMES_BRIDGE_API_URL`, `HERM
 
 ---
 
-## 8. License
+## 9. License
 
 Apache-2.0
