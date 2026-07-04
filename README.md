@@ -40,32 +40,51 @@
 
 ## 2. Profile Awareness
 
-The bridge connects to the **same Hermes profile** your gateway is currently serving.
-No extra configuration needed — it inherits everything that profile has loaded:
+The bridge connects to the **same Hermes profile** your gateway is serving.
+It inherits everything that profile has loaded — skills, memory, tools, sessions.
 
-- **Skills** — all profile-specific skills and workflows
-- **Memory** — persistent facts, preferences, and environment details
-- **Tools** — the full agent toolset bound to that profile
-- **Sessions** — `X-Hermes-Session-Id` threads into the profile's session store
+You can pick which profile to use in **two ways**:
 
-### 2.1 How it works
+| Method                 | What you do                                                              | When to use                |
+| ---------------------- | ------------------------------------------------------------------------ | -------------------------- |
+| **Set a default**      | Edit `~/.config/hermes-mcp-bridge/config.toml`                           | You mostly use one profile |
+| **Mention it in chat** | Say _"Use Hermes with the default profile to…"_ in the Cursor chat input | You switch profiles often  |
 
-```python
-# config.toml → /v1/chat/completions request
-{
-  "model": "general_researcher",   # ← this IS the Hermes profile name
-  "messages": [{"role": "user", "content": "..."}]
-}
+Neither requires touching `mcp.json` or restarting Cursor.
+
+### 2.1 Default profile (config.toml)
+
+```toml
+# ~/.config/hermes-mcp-bridge/config.toml
+model = "general_researcher"   # ← used when no profile arg is passed
 ```
 
-The `model` field in `config.toml` is the profile identifier. The gateway routes it to the
-matching profile. To switch profiles, change `model` to the name shown in `/v1/models`.
+### 2.2 Switching profiles from Cursor
 
-### 2.2 Discover available profiles
+The `hermes_ask` tool exposes an optional `profile` parameter. Just mention
+which profile you want — Cursor's LLM reads the tool signature and passes it.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  You say in Cursor                                      │
+├─────────────────────────────────────────────────────────┤
+│  "Use Hermes with the default profile to send an email" │
+│    → hermes_ask(prompt="send an email",                 │
+│                  profile="default")                     │
+│                                                         │
+│  "Ask Hermes to search arXiv for MCP papers"            │
+│    → hermes_ask(prompt="search arXiv...")               │
+│                 # no profile → uses config.toml default │
+└─────────────────────────────────────────────────────────┘
+```
+
+No mcp.json changes, no config edits, no restart. Just say the profile name.
+
+### 2.3 Discover available profiles
 
 ```bash
 curl -s http://127.0.0.1:8642/v1/models \
-  -H "Authorization: Bearer change-me-local-dev"
+  -H "Authorization: Bearer change...-dev"
 # → {"data": [{"id": "general_researcher", ...}, {"id": "default", ...}]}
 ```
 
@@ -117,13 +136,7 @@ Add to `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "hermes": {
-      "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "/path/to/hermes-mcp-bridge",
-        "hermes-mcp-bridge"
-      ]
+      "command": "/home/nirvana/.local/bin/hermes-mcp-bridge"
     }
   }
 }
@@ -137,12 +150,12 @@ Settings → MCP → `hermes` should show **connected**.
 
 ## 5. Tools
 
-| Tool            | Signature                     | Purpose                         |
-| --------------- | ----------------------------- | ------------------------------- |
-| `hermes_ask`    | `(prompt, session_id?) → str` | Delegate a task to Hermes Agent |
-| `hermes_check`  | `(job_id) → str`              | Poll async job status (stub)    |
-| `hermes_cancel` | `(job_id) → str`              | Cancel an async job (stub)      |
-| `hermes_reset`  | `() → str`                    | Clear the job queue (stub)      |
+| Tool            | Signature                               | Purpose                         |
+| --------------- | --------------------------------------- | ------------------------------- |
+| `hermes_ask`    | `(prompt, session_id?, profile?) → str` | Delegate a task to Hermes Agent |
+| `hermes_check`  | `(job_id) → str`                        | Poll async job status (stub)    |
+| `hermes_cancel` | `(job_id) → str`                        | Cancel an async job (stub)      |
+| `hermes_reset`  | `() → str`                              | Clear the job queue (stub)      |
 
 > The last three are kept for API parity. `hermes-mcp-bridge` runs synchronously —
 > `hermes_ask` blocks until the full Agent response is ready.
@@ -151,18 +164,27 @@ Settings → MCP → `hermes` should show **connected**.
 
 ## 6. REPL Context (Session Continuity)
 
-```python
-# Turn 1 — no session_id
-hermes_ask(prompt="Remember that my lucky number is 42")
-# → Hermes remembers 42
+Hermes remembers what you told it earlier — just keep talking in the same
+Cursor chat. Cursor automatically reuses the same `session_id` across turns.
 
-# Turn 2 — same session_id
-hermes_ask(prompt="What is my lucky number?", session_id="repl-001")
-# → Hermes answers 42
+```
+┌─────────────────────────────────────────────────────────┐
+│  You say in Cursor                                      │
+├─────────────────────────────────────────────────────────┤
+│  "Use Hermes to remember that my lucky number is 42"    │
+│    → Hermes remembers 42                                │
+│                                                         │
+│  "Ask Hermes what my lucky number is"                   │
+│    → Hermes answers 42                                  │
+│      (same session_id — context preserved)              │
+└─────────────────────────────────────────────────────────┘
 ```
 
 The bridge passes `session_id` through as the `X-Hermes-Session-Id` HTTP header.
 The gateway uses it to maintain context across calls.
+
+No special syntax. No session IDs to track. Just talk normally — Hermes
+remembers.
 
 ---
 

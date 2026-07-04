@@ -52,7 +52,7 @@ def load_config() -> dict:
     return cfg
 
 
-def ask_gateway(cfg: dict, prompt: str, session_id: str | None) -> str:
+def ask_gateway(cfg: dict, prompt: str, session_id: str | None, model: str | None = None) -> str:
     """POST /v1/chat/completions and return the assistant content."""
     url = cfg["api_url"].rstrip("/") + "/v1/chat/completions"
     headers = {
@@ -63,7 +63,7 @@ def ask_gateway(cfg: dict, prompt: str, session_id: str | None) -> str:
         headers["X-Hermes-Session-Id"] = session_id
 
     body = {
-        "model": cfg["model"],
+        "model": model or cfg["model"],
         "messages": [{"role": "user", "content": prompt}],
         "stream": False,
     }
@@ -111,12 +111,15 @@ def main() -> None:
             "Args:\n"
             "  prompt: Natural-language instruction for Hermes.\n"
             "  session_id: Optional. Pass the same id across multiple calls in one chat "
-            "to let Hermes remember prior steps (draft → refine → save).\n\n"
+            "to let Hermes remember prior steps (draft → refine → save).\n"
+            "  profile: Optional. Hermes profile to use (e.g. 'default', 'general_researcher'). "
+            "Overrides the model in config.toml. Discover available profiles via the gateway's "
+            "/v1/models endpoint.\n\n"
             "Returns: Hermes's final answer text."
         )
     )
-    def hermes_ask(prompt: str, session_id: str | None = None) -> str:
-        return ask_gateway(cfg, prompt, session_id)
+    def hermes_ask(prompt: str, session_id: str | None = None, profile: str | None = None) -> str:
+        return ask_gateway(cfg, prompt, session_id, model=profile)
 
     # Stubs for API parity with hermes-mcp
     @mcp.tool(description="Not implemented. Kept for API parity with hermes-mcp.")
